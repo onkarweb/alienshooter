@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Shooting Game</title>
+	   <meta charset="UTF-8">
+	   <link href="https://fonts.googleapis.com/css?family=Rubik+Mono+One&display=swap" rel="stylesheet">
+	   <link href="https://fonts.googleapis.com/css?family=Oswald&display=swap" rel="stylesheet"> 
+	<style>
+		body{
+			background: #ff8c00;
+			text-align: center;
+		}
+		.gameHeading{
+			font-family: 'Rubik Mono One', sans-serif;	
+			font-size: 2.5rem;	
+		}
+
+		#scoreOutput, #playerLivesOutput{
+			font-family: 'Oswald', sans-serif;
+			margin: 0px;
+		}
+
+		#displayStatsTable{
+			width: 250px;
+			text-align: right;
+			margin-right: 100px;
+		}
+
+		#gameCanvas{
+			border: 5px solid #ded4d4;
+			box-shadow: 0 4px 10px 0 rgba(0,0,0,0.2),0 4px 20px 0 rgba(0,0,0,0.19);
+			display: inline-block;
+
+		}
+
+		#control_table{
+			display: inline-block;
+			width: 9%;
+			background: rgba(100, 100, 100, 0.5);
+			float: right;
+		}
+
+		#container_div{
+			text-align: center;
+			padding: 10px 20px 10px 20px;
+		}
+
+		.control_img{
+			width: 80px;
+			height: 80px;
+		}
+	</style>
+</head>
+<body>
+	<h1 class="gameHeading">Shoot me if you can</h1>
+	<table id = 'displayStatsTable' align='right'>
+		<tr>
+			<td>
+				<h2 id= 'scoreOutput'></h2>
+			</td>
+		</tr>
+		<tr>
+			<td>
+				<h2 id= 'playerLivesOutput'></h2>
+			</td>
+		</tr>
+	</table>
+	<div id="container_div">
+			<canvas id = 'gameCanvas' width="1300" height="550"></canvas>
+	</div>
+
+	<script type="text/javascript">
+		var canvas;
+		var canvasContext;
+		var bulletList = [];
+		var enemyList = [];
+		var blastList = [];
+		var score = 0;
+		var isResultDisplaying = false;
+		var isLevelDisplaying = false;
+		var level = 1;
+		
+		var LOSING_SCORE = 3;
+		var WINNNING_SCORE = 5;
+		var playerLives = LOSING_SCORE;
+		const LEVEL_SCORE_DIFF = 4;
+
+		var shooterY = 300; //vertical position of the shooter
+		var bulletSpeedX = 30; //we'll only require horizontal shooting bullets for now
+		var bulletRadius = 8;
+		 //code to display img shooter
+		 var img = new Image(); 
+         img.src = "newshooter.png";
+         //var shooterHeight = Number(img.height); 
+         var shooterHeight= -1;
+         img.onload = function(){
+			    shooterHeight= this.height;
+			}
+
+         //to display enemy UFOs
+         var enemyImg = new Image();
+         enemyImg.src = "enemyUFO2.png";
+         var enemyHeight = -1;
+         enemyImg.onload = function(){
+			    enemyHeight = this.height;
+			}
+
+         //to display the blast
+         var blastImg = new Image();
+         blastImg.src = "blastSmall.png";
+         var blastHeight = -1;
+         blastImg.onload = function(){
+         	blastHeight = this.height;
+         }
+
+         var enemySpeedX = 8;
+		 //var enemyHeight = Number(enemyImg.height);
+
+		 var blastShowTime = 200;
+
+
+		const calculateMousePostion = (evt) => {
+			var rect = canvas.getBoundingClientRect();
+			var root = document.documentElement;
+			var mouseX = evt.clientX - rect.left - root.scrollLeft;
+			var mouseY = evt.clientY - rect.top - root.scrollTop;
+			return {
+				x: mouseX,
+				y: mouseY
+			}
+		}
+
+		window.onload = function(){
+			canvas = document.getElementById("gameCanvas");
+			canvasContext = canvas.getContext("2d");
+			canvasContext.font = "18px comic sans ms";
+			var fps = 60;
+			setInterval(() => {
+				//functions to call
+				move();
+				display();
+
+			}, 1000/fps);
+
+			setInterval(() => {
+				addEnemyShip();
+			}, 800);
+
+			//removing the mouse cursor for a better experience
+			canvas.style.cursor = 'none';
+
+			canvas.addEventListener('mousemove', function(evt){
+				var mousePos = calculateMousePostion(evt);
+				if(mousePos.y > (canvas.height - img.height)){
+					return;
+				}
+				shooterY = mousePos.y; //updating the vertical position of the shooter according to the mouse position
+			})
+
+			canvas.addEventListener('mousedown', function(evt){
+				bulletList.push({
+					bulletX: img.width,  //5px inside the shooter as 
+					bulletY: shooterY + img.height/2//15 is added in order to shoot from the middle of the shooter
+				});
+					
+				if(isResultDisplaying){
+					console.log("Reset game called")
+					if(playerLives <= 0){
+						resetGame();   //reset the game when the user clicks on the canvas on the losing screen
+					}else if(score % LEVEL_SCORE_DIFF == 0){
+						resetLevelUpgrade();  //reset screen when level increases
+						console.log("Level Reset called")
+					}
+				}
+			})
+		}
+
+		const addEnemyShip = () => {
+			enemyList.push({
+				enemyX: Number(canvas.width),
+				enemyY: Math.floor(Math.random() * (Number(canvas.height) - enemyHeight))  //minus enemyHeight to avoid half visible enemies at the bottom
+			})
+		}
+
+		//adds a blast to the blastList array on specified coordinates
+		const addBlast = (X, Y) => {
+			blastList.push({
+				blastX: X,
+				blastY: Y,
+				createTime: (new Date()).getTime(),
+				sizeFactor: 0.02
+			})
+		}
+
+		const checkResult = () => {
+			if(playerLives <= 0){
+				isResultDisplaying = true;
+			}else if(score!=0 && score % LEVEL_SCORE_DIFF == 0 && parseInt(score/LEVEL_SCORE_DIFF) === level){
+				isResultDisplaying = true;
+			}
+			else
+			    isResultDisplaying = false;
+
+			// if(parseInt(score/LEVEL_SCORE_DIFF) != level-1){
+			// }
+		}
+
+		//only display the rest of the things if showWinningScreen is false
+		const showResultScreen = () => {
+			if(playerLives <= 0){
+				displayText('GAME OVER', true, 45);
+				displayText('Click To Play Again', false, 55)
+			}else if(score % LEVEL_SCORE_DIFF == 0){
+				displayText('LEVEL ' + (level + 1), true, 45);  //level + 1 is shown on UI and the level is incremented once the user clicks on play level screen
+				displayText('Click To Play', false, 55)		
+			}
+		}
+		
+		//To display something on the canvas : mainly text
+		//@param text: the string to display
+		//@param isBig: if the text is big 
+		//@height : it is the percentage of the height where the text has to be displayed
+		const displayText = (text, isBig, height) => {
+			canvas.style.cursor = 'auto';
+			const LARGE_CHAR_WIDTH = 35;
+			const SMALL_CHAR_WIDTH = 7.5;
+			canvasContext.fillStyle = 'white';
+
+			if(isBig === true){
+				canvasContext.font = "40px Rubik Mono One";
+			    canvasContext.fillText(text, canvas.width/2 - (text.length * LARGE_CHAR_WIDTH / 2) ,canvas.height * (height / 100));
+			}else if (isBig === false){
+				canvasContext.font = "20px Oswald";
+				canvasContext.fillText(text, canvas.width/2 - (text.length * SMALL_CHAR_WIDTH / 2), canvas.height * (height / 100))
+			}
+		}
+
+		const resetGame = () => {
+			bulletList = [];
+			enemyList = [];
+			blastList = [];
+			score = 0;
+			level = 1;
+			playerLives = LOSING_SCORE;
+			isResultDisplaying = false;
+			canvas.style.cursor = 'none';
+		}
+
+		const resetLevelUpgrade = () => {
+			bulletList = [];
+			enemyList = [];
+			blastList = [];
+		    level++;
+			isResultDisplaying = false;
+			canvas.style.cursor = 'none';
+		}
+			
+				
+
+		//method to update variables so that the objects can move when used in display function
+		const move = () => {
+
+			//don't update any variables when the result is displaying
+			if(isResultDisplaying){
+				return;          
+			}
+
+			var count = bulletList.length;
+			var enemyCount = enemyList.length;
+			var shooterH = Number(img.height);
+			var shooterW = Number(img.width);
+
+			for(var i = 0; i < count; i++){
+				bulletList[i].bulletX += bulletSpeedX;
+				if(bulletList[i].bulletX > canvas.width){
+					bulletList.splice(i,1);
+					count--; //to update the value of count right away we remove a bullet
+					break;  //no need to check for collision once the bullet is removed
+				}
+				//checking for the bullet hit on enemies
+				for(var j = 0; j < enemyCount; j++){
+					if(bulletList[i].bulletY >= enemyList[j].enemyY && 
+						bulletList[i].bulletY <= enemyList[j].enemyY + enemyHeight &&
+						bulletList[i].bulletX >= enemyList[j].enemyX){
+						//if the vertical position of a bullet is in the range of enemy box and the bullet has touched the enemy box then delete the enemy
+						addBlast(bulletList[i].bulletX, enemyList[j].enemyY + enemyImg.height/2 - blastHeight/2);  //display a blast at that particular location
+						enemyList.splice(j, 1);
+						bulletList.splice(i,1);
+						count--;
+						enemyCount--;
+						score++;
+						level = score / LEVEL_SCORE_DIFF;
+						break;
+					}
+				} // inner for loop
+			} // outer for loop
+
+
+			//updating the enemy movement
+			for(var i = 0; i < enemyCount; i++ ){
+				enemyList[i].enemyX -= enemySpeedX;
+				if(enemyList[i].enemyX < 10){
+					enemyList.splice(i,1);
+					enemyCount--;
+					score--; //if any enemy crosses the line, reduce the score
+				}
+
+				//checking for enemy hitting the shooter
+				var shooterBottom = shooterY + shooterH;
+				var enemyBottom = enemyList[i].enemyY + enemyHeight;
+				if(((shooterY <= enemyList[i].enemyY && shooterBottom >= enemyList[i].enemyY) ||
+				    (shooterY <= enemyBottom && shooterBottom >= enemyBottom))&&
+				     enemyList[i].enemyX <= shooterW)
+				    {
+					//if the vertical position of shooter is in the range of enemy box and the enemy has touched the shooter then reduce the score
+					enemyList.splice(i, 1);
+					enemyCount--;
+					score--;
+					playerLives--;
+				} //if closing
+			}//for loop for enemyList closing
+
+			var blastCount = blastList.length; 
+			var d = new Date();
+
+			for(var i = 0; i < blastCount; i++){
+
+				//removing the blasts after some time
+				if(blastList[i].createTime + blastShowTime < d.getTime()){
+					blastList.splice(i, 1);
+					blastCount--;
+					break;
+				}
+			}
+
+			// document.getElementById('bulletCounter').innerHTML = 'Bullets: ' + bulletList.length + 
+			// 													 '<br/> Enemies: ' + enemyCount +
+			// 													 '<br/> Blasts: ' + blastCount;
+			document.getElementById('scoreOutput').innerHTML = 'Score: ' + score;
+			document.getElementById('playerLivesOutput').innerHTML = 'Lives Remaining: ' + playerLives;
+
+		}//move ending
+
+		
+
+
+
+		const display = () => {
+			//to blank out the screen with a new canvas i.e. to be used at 30fps
+			colorRectangle(0,0,canvas.width, canvas.height, "black");
+
+			checkResult();
+			if(isResultDisplaying){
+				showResultScreen();
+				return;
+			}
+
+			//draws the shooter
+			canvasContext.drawImage(img,5,shooterY);
+
+			//draws bullets on the canvas
+			if(bulletList.length > 0){
+				bulletList.forEach(function(bullet, i){
+					colorCircle(bullet.bulletX, bullet.bulletY, bulletRadius, 'white');
+				})
+			}
+
+			//draws enemies on the canvas
+			if(enemyList.length > 0){
+				enemyList.forEach(function(enemy, i){
+					//colorRectangle(enemy.enemyX, enemy.enemyY, enemyHeight, enemyHeight, 'red');
+					canvasContext.drawImage(enemyImg, enemy.enemyX, enemy.enemyY);
+				})
+			}
+
+			//draws blast
+			if(blastList.length > 0){
+				blastList.forEach(function(blast, i){
+					canvasContext.drawImage(blastImg, blast.blastX, blast.blastY);
+				});
+			}
+		}
+
+		const colorTriangle = (centerX, centerY, topX, topY, color) => {
+			canvasContext.fillStyle = color;
+			canvasContext.beginPath();
+		    canvasContext.moveTo(centerX, centerY);  //move to the center point
+		    canvasContext.lineTo(topX, topY);  //for top point
+		    canvasContext.lineTo(topX, topY + 30);  //for bottom, same X value as top
+		    canvasContext.fill();
+		}
+
+		const colorRectangle = (leftX, topY, width, height, color) =>{
+			canvasContext.fillStyle = color;
+			canvasContext.fillRect(leftX, topY, width, height);
+		}
+
+		const colorCircle = (centerX, centerY, radius, color) => {
+			canvasContext.fillStyle = color;
+			canvasContext.beginPath();
+			canvasContext.arc(centerX, centerY, radius, 0, 2 * Math.PI, true);
+			canvasContext.fill();
+		}
+
+
+	</script>	
+</body>
+</html>
